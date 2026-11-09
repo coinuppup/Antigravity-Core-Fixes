@@ -1,0 +1,16 @@
+# Generated macOS app copies
+*.app
+.Antigravity Core Fixes.build.app/
+.Antigravity Core Fixes.old.app/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# OS metadata
+.DS_Store
+
+# Logs and editor temporary files
+*.log
+*.tmp
+*.swp

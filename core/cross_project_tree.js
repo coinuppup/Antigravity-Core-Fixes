@@ -23,6 +23,13 @@
     .ag-nav-row{display:flex;align-items:center;gap:5px;width:100%;padding:4px 6px;min-width:0}
     .ag-nav-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .ag-nav-status{padding:8px;color:var(--muted-foreground)}
+    .ag-new-chat-files{position:fixed;top:74px;right:20px;bottom:155px;width:min(320px,calc(100vw - 40px));z-index:25;display:flex;flex-direction:column;align-items:flex-end;pointer-events:none}
+    .ag-new-chat-files button,.ag-new-chat-files input,.ag-new-chat-files select{pointer-events:auto}
+    .ag-new-chat-files-toggle{border:1px solid var(--border);border-radius:8px;background:var(--background);color:var(--foreground);padding:7px 11px;cursor:pointer;box-shadow:0 2px 8px #0002}
+    .ag-new-chat-files-drawer{display:flex;flex-direction:column;min-height:0;width:100%;flex:1;margin-top:8px;padding:10px 0;border:1px solid var(--border);border-radius:10px;background:var(--background);box-shadow:0 8px 26px #0002;pointer-events:auto}
+    .ag-new-chat-files-heading{padding:2px 14px 10px;font-size:13px;font-weight:600}
+    .ag-new-chat-files-drawer .ag-nav-panel{flex:1;min-height:0}
+    @media(max-width:800px){.ag-new-chat-files{top:65px;bottom:125px}}
   `;
   document.head.appendChild(style);
 
@@ -35,6 +42,13 @@
   const searchInput = panel.querySelector('input');
   const scopeSelect = panel.querySelector('select');
   const tree = panel.querySelector('.ag-nav-tree');
+  const draftHost = document.createElement('div');
+  draftHost.className = 'ag-new-chat-files';
+  draftHost.innerHTML = '<button type="button" class="ag-new-chat-files-toggle" aria-label="打开或关闭文件树">📁 文件树</button><div class="ag-new-chat-files-drawer"><div class="ag-new-chat-files-heading">文件树 · 拖入当前对话</div></div>';
+  const draftDrawer = draftHost.querySelector('.ag-new-chat-files-drawer');
+  draftHost.querySelector('.ag-new-chat-files-toggle').onclick = () => {
+    draftDrawer.style.display = draftDrawer.style.display === 'none' ? 'flex' : 'none';
+  };
   let navigation = {home: '', projects: []};
   let selected = null;
   let sidebar = null;
@@ -46,6 +60,13 @@
   let disposed = false;
 
   const projectId = () => new URL(location.href).searchParams.get('project') || '';
+  const isDraft = () => location.pathname === '/' && Boolean(document.querySelector('[data-lexical-editor="true"]'));
+  const defaultDraftFolder = () => {
+    const project = navigation.projects.find(item => item.id === projectId());
+    const folder = project?.folders[0];
+    return folder ? {path: folder.path, name: project.name + ' / ' + folder.name} :
+      navigation.home ? {path: navigation.home, name: '主目录'} : null;
+  };
   const parentPath = value => value === '/' ? '/' : value.replace(/\/+$/, '').replace(/\/[^/]*$/, '') || '/';
 
   function row(parent, name, subtitle, onClick) {
@@ -115,6 +136,10 @@
   }
 
   function select(dir, name) {
+    if (!dir && isDraft()) {
+      const fallback = defaultDraftFolder();
+      if (fallback) { dir = fallback.path; name = fallback.name; }
+    }
     selected = dir ? {path: dir, name: name || dir.split('/').pop() || '/'} : null;
     searchInput.value = '';
     menu.hidden = true;
@@ -137,7 +162,7 @@
       button.onclick = onClick;
       menu.appendChild(button);
     };
-    option('当前项目目录', '返回反重力原生文件树', () => select(null));
+    option('当前项目目录', isDraft() ? '浏览新对话所选项目' : '返回反重力原生文件树', () => select(null));
     option('主目录', navigation.home, () => select(navigation.home, '主目录'));
     option('文件系统根目录', '/', () => select('/', '/'));
     for (const project of navigation.projects) {
@@ -178,7 +203,17 @@
     if (routeKey && routeKey !== key) select(null);
     routeKey = key;
     const next = document.querySelector('[data-testid="tab-file-tree-sidebar"]');
-    if (!next) { sidebar = null; nativeWrapper = null; return; }
+    if (!next) {
+      sidebar = null;
+      nativeWrapper = null;
+      if (!isDraft()) { draftHost.remove(); panel.remove(); return; }
+      if (!draftHost.isConnected) document.body.appendChild(draftHost);
+      if (panel.parentElement !== draftDrawer) draftDrawer.appendChild(panel);
+      if (!selected && navigation.home) select(null);
+      syncVisibility();
+      return;
+    }
+    draftHost.remove();
     const wrapper = next.querySelector('[role="tree"]:not(.ag-nav-tree)')?.parentElement;
     if (!wrapper) return;
     sidebar = next;
@@ -193,7 +228,11 @@
   });
   observer.observe(document.body, {childList: true, subtree: true});
   const poller = setInterval(attach, 2000);
-  api.listNavigationRoots().then(value => { navigation = value; rebuildMenu(); }).catch(() => {});
+  api.listNavigationRoots().then(value => {
+    navigation = value;
+    if (isDraft() && !selected) select(null);
+    rebuildMenu();
+  }).catch(() => {});
   attach();
   window.__agCrossProjectTreeCleanup = () => {
     disposed = true;
@@ -203,6 +242,7 @@
     clearTimeout(searchTimer);
     if (nativeWrapper) nativeWrapper.style.display = '';
     panel.remove();
+    draftHost.remove();
     style.remove();
   };
 })();

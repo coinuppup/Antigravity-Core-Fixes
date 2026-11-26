@@ -1,139 +1,111 @@
 #!/usr/bin/env python3
-"""Build an isolated macOS copy of Antigravity with Core Fixes installed.
-
-The official /Applications/Antigravity.app remains untouched and can continue
-to receive normal Google updates. Run this script again after an official
-update to refresh the isolated copy.
-"""
+"""Install the update-safe Antigravity Core Fixes user plugin and launcher."""
 import argparse
 import os
+import plistlib
 import shutil
+import stat
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'scripts'))
-import asar_utils
-import install
-
 OFFICIAL_APP = Path('/Applications/Antigravity.app')
-DEST_APP = ROOT / 'Antigravity Core Fixes.app'
+PLUGIN_SOURCE = ROOT / 'plugin'
+PLUGIN_DEST = Path.home() / '.gemini/config/plugins/antigravity-core-fixes'
+LAUNCHER_APP = ROOT / 'Antigravity Core Fixes.app'
 BUILD_APP = ROOT / '.Antigravity Core Fixes.build.app'
 OLD_APP = ROOT / '.Antigravity Core Fixes.old.app'
-ENTITLEMENTS = ROOT / 'scripts/Antigravity.entitlements'
-ASAR_REL = Path('Contents/Resources/app.asar')
-BACKUP_REL = Path('Contents/Resources/app.asar.original_backup')
+CORE_FILES = ('desktop_compat.js', 'office_router.js', 'chat_enhancer.js', 'startup_recovery.cjs')
+ASSET_FILES = ('xlsx.full.min.js', 'jszip.min.js', 'docx-preview.min.js', 'PptxViewJS.min.js')
 
 
-def run(cmd, **kwargs):
-    print('$', ' '.join(str(x) for x in cmd))
-    return subprocess.run(cmd, **kwargs)
+def remove_path(target):
+    if target.is_symlink() or target.is_file(): target.unlink()
+    elif target.exists(): shutil.rmtree(target)
 
 
-def destination_pids():
-    exe = DEST_APP / 'Contents/MacOS/Antigravity'
-    if not exe.exists():
-        return []
+def official_version():
     try:
-        res = run(['pgrep', '-f', str(exe)], capture_output=True, text=True, check=False)
-        return [int(x) for x in res.stdout.split() if x.isdigit()]
+        with (OFFICIAL_APP / 'Contents/Info.plist').open('rb') as stream:
+            return plistlib.load(stream).get('CFBundleShortVersionString', 'unknown')
+    except Exception: return 'unknown'
+
+
+def install_plugin():
+    staging = PLUGIN_DEST.with_name(PLUGIN_DEST.name + '.installing')
+    old = PLUGIN_DEST.with_name(PLUGIN_DEST.name + '.old')
+    remove_path(staging); remove_path(old)
+    shutil.copytree(PLUGIN_SOURCE, staging)
+    (staging / 'core').mkdir(); (staging / 'assets').mkdir()
+    for name in CORE_FILES: shutil.copy2(ROOT / 'core' / name, staging / 'core' / name)
+    for name in ASSET_FILES: shutil.copy2(ROOT / 'assets' / name, staging / 'assets' / name)
+    PLUGIN_DEST.parent.mkdir(parents=True, exist_ok=True)
+    if PLUGIN_DEST.exists(): os.replace(PLUGIN_DEST, old)
+    try: os.replace(staging, PLUGIN_DEST)
     except Exception:
-        return []
+        if old.exists() and not PLUGIN_DEST.exists(): os.replace(old, PLUGIN_DEST)
+        raise
+    remove_path(old)
 
 
-def wait_for_destination_exit():
-    import signal
-    pids = destination_pids()
-    if not pids:
-        return
-    print('请保存工作：正在退出已打开的 Antigravity Core Fixes...')
-    for pid in pids:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-    for _ in range(80):
-        if not destination_pids():
-            return
-        time.sleep(0.25)
-    raise RuntimeError('旧副本仍在运行，请手动退出后重试。')
+def sync_support_scripts():
+    target = PLUGIN_DEST / 'scripts'; target.mkdir(exist_ok=True)
+    for name in ('launch_mac.py', 'inspector_client.py'): shutil.copy2(ROOT / 'scripts' / name, target / name)
 
 
-def remove_path(path):
-    if path.is_symlink() or path.is_file():
-        path.unlink()
-    elif path.exists():
-        shutil.rmtree(path)
-
-
-def build():
-    if not OFFICIAL_APP.exists():
-        raise RuntimeError(f'未找到官方客户端: {OFFICIAL_APP}')
-    wait_for_destination_exit()
-    remove_path(BUILD_APP)
-    remove_path(OLD_APP)
-
-    print(f'正在从官方 {OFFICIAL_APP} 创建独立副本...')
-    run(['ditto', str(OFFICIAL_APP), str(BUILD_APP)], check=True)
-
-    info = BUILD_APP / 'Contents/Info.plist'
-    run(['/usr/libexec/PlistBuddy', '-c', 'Set :CFBundleDisplayName Antigravity Core Fixes', str(info)], check=False)
-
-    target = BUILD_APP / ASAR_REL
-    backup = BUILD_APP / BACKUP_REL
-    if not backup.exists():
-        shutil.copy2(target, backup)
-
-    print('正在注入核心修复（始终基于当前官方版本构建，避免叠加补丁）...')
-    packed = install.build_enhanced_asar(target)
-    target.write_bytes(packed)
-
-    _, files = asar_utils.read_asar(target.read_bytes())
-    if install.MARKER.encode() not in files.get('dist/preload.js', b''):
-        raise RuntimeError('生成的 ASAR 未包含修复标记，已中止安装。')
-    import json
-    version = json.loads(files.get('package.json', b'{}')).get('version', 'unknown')
-    print(f'当前适配的官方版本: {version}')
-
-    run(['codesign', '--force', '--deep', '--sign', '-', '--entitlements', str(ENTITLEMENTS), '--options', 'runtime', str(BUILD_APP)], check=True)
-    verify = run(['codesign', '--verify', '--deep', '--strict', '--verbose=2', str(BUILD_APP)], capture_output=True, text=True)
-    if verify.returncode != 0:
-        raise RuntimeError('代码签名校验失败:\n' + verify.stdout + verify.stderr)
-
-    if DEST_APP.exists():
-        os.replace(DEST_APP, OLD_APP)
-    try:
-        os.replace(BUILD_APP, DEST_APP)
+def build_launcher():
+    remove_path(BUILD_APP); remove_path(OLD_APP)
+    macos = BUILD_APP / 'Contents/MacOS'; resources = BUILD_APP / 'Contents/Resources'
+    macos.mkdir(parents=True); resources.mkdir(parents=True)
+    executable = macos / 'Antigravity Core Fixes'
+    executable.write_text('#!/bin/zsh\nexec /usr/bin/python3 ' + repr(str(PLUGIN_DEST / 'scripts/launch_mac.py')) + ' "$@"\n', encoding='utf8')
+    executable.chmod(executable.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    info = {
+        'CFBundleName': 'Antigravity Core Fixes', 'CFBundleDisplayName': 'Antigravity Core Fixes',
+        'CFBundleIdentifier': 'local.antigravity.core-fixes', 'CFBundleVersion': '2.0.0',
+        'CFBundleShortVersionString': '2.0.0', 'CFBundlePackageType': 'APPL',
+        'CFBundleExecutable': executable.name, 'NSHighResolutionCapable': True,
+    }
+    icons = list((OFFICIAL_APP / 'Contents/Resources').glob('*.icns'))
+    if icons:
+        shutil.copy2(icons[0], resources / 'AppIcon.icns'); info['CFBundleIconFile'] = 'AppIcon.icns'
+    with (BUILD_APP / 'Contents/Info.plist').open('wb') as stream: plistlib.dump(info, stream)
+    subprocess.run(['codesign', '--force', '--deep', '--sign', '-', str(BUILD_APP)], check=True, capture_output=True)
+    if LAUNCHER_APP.exists(): os.replace(LAUNCHER_APP, OLD_APP)
+    try: os.replace(BUILD_APP, LAUNCHER_APP)
     except Exception:
-        if OLD_APP.exists() and not DEST_APP.exists():
-            os.replace(OLD_APP, DEST_APP)
+        if OLD_APP.exists() and not LAUNCHER_APP.exists(): os.replace(OLD_APP, LAUNCHER_APP)
         raise
     remove_path(OLD_APP)
-    try:
-        run(['xattr', '-dr', 'com.apple.quarantine', str(DEST_APP)], check=False, capture_output=True)
-    except Exception:
-        pass
 
-    print()
-    print('=' * 64)
-    print('安装完成：Antigravity Core Fixes（独立副本）')
-    print(f'位置: {DEST_APP}')
-    print('官方原版未被修改:')
-    print(f'  {OFFICIAL_APP}')
-    print('官方客户端更新后，重新运行本命令即可自动适配新版本。')
-    print('=' * 64)
+
+def check():
+    print(f'官方 Antigravity: {official_version()} ({OFFICIAL_APP})')
+    print(f'用户插件: {"已安装" if (PLUGIN_DEST / "runtime/main.cjs").exists() else "未安装"} ({PLUGIN_DEST})')
+    print(f'稳定启动器: {"已安装" if LAUNCHER_APP.exists() else "未安装"} ({LAUNCHER_APP})')
+    print('官方 app.asar: 不修改')
+
+
+def install(launch=False):
+    if not OFFICIAL_APP.exists(): raise RuntimeError(f'未找到官方客户端：{OFFICIAL_APP}')
+    install_plugin(); sync_support_scripts(); build_launcher()
+    print('安装完成：用户级插件与稳定启动器已更新。')
+    print(f'插件：{PLUGIN_DEST}')
+    print(f'启动器：{LAUNCHER_APP}')
+    print('今后官方 Antigravity 更新不会覆盖插件；请始终从该启动器打开。')
+    if launch: subprocess.run(['open', '-n', str(LAUNCHER_APP)], check=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--launch', action='store_true', help='构建完成后启动独立副本')
+    parser.add_argument('--check', action='store_true'); parser.add_argument('--launch', action='store_true')
     args = parser.parse_args()
-    build()
-    if args.launch:
-        run(['open', '-n', str(DEST_APP)], check=True)
+    if args.check: check()
+    else: install(args.launch)
 
 
 if __name__ == '__main__':
-    main()
+    try: main()
+    except Exception as error:
+        print(f'[错误] {error}', file=sys.stderr); raise SystemExit(1)

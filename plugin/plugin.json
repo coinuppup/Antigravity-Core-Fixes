@@ -1,0 +1,12 @@
+{
+  "name": "antigravity-core-fixes",
+  "displayName": "Antigravity Core Fixes",
+  "version": "2.0.0",
+  "description": "Update-safe desktop runtime fixes for Antigravity PDF, Office preview, workspace, and chat interactions.",
+  "author": "Antigravity Core Fixes",
+  "suggestedPrompts": [
+    "检查 Antigravity Core Fixes 插件状态",
+    "诊断 Office 或 PDF 预览问题",
+    "说明 Core Fixes 当前提供的增强"
+  ]
+}

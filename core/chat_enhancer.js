@@ -23808,6 +23808,71 @@ async function diffFolderChildren(childrenContainer, dirPath, depth, expandedSet
 
   // before the native chat uploader applies its image MIME allowlist.
 
+  // Forward native files dropped from macOS Finder to Antigravity's official
+  // hidden multi-file input. Internal workspace drags use custom URI payloads
+  // and are intentionally left to the existing handlers above.
+  function initFinderFileDropCompatibility() {
+    if (window.__antigravityFinderDropInitialized) return () => {};
+    window.__antigravityFinderDropInitialized = true;
+
+    const hasNativeFiles = event => {
+      if (window.__antigravityDraggedUris) return false;
+      const transfer = event.dataTransfer;
+      if (!transfer) return false;
+      if (transfer.files && transfer.files.length > 0) return true;
+      return Array.from(transfer.items || []).some(item => item.kind === 'file');
+    };
+
+    const findOfficialInput = () => {
+      const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+      return inputs.find(input => input.multiple) || inputs[0] || null;
+    };
+
+    const handleDragOver = event => {
+      if (!hasNativeFiles(event)) return;
+      if (!document.querySelector('[aria-label="Message input"]')) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    };
+
+    const handleDrop = event => {
+      if (!hasNativeFiles(event)) return;
+      const files = Array.from(event.dataTransfer?.files || []);
+      if (!files.length) return;
+      const input = findOfficialInput();
+      if (!input) {
+        ToolkitCore.showToast('未找到附件上传入口，请先点击聊天输入框后重试');
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      try {
+        const transfer = new DataTransfer();
+        for (const file of files) transfer.items.add(file);
+        input.files = transfer.files;
+        input.dispatchEvent(new Event('input', {bubbles: true}));
+        input.dispatchEvent(new Event('change', {bubbles: true}));
+        document.querySelector('[aria-label="Message input"]')?.focus();
+        const label = files.length === 1 ? files[0].name : `${files.length} 个文件`;
+        ToolkitCore.showToast(`✓ 已从访达添加 ${label}`);
+      } catch (error) {
+        console.warn('[FinderDropCompat] Failed to forward dropped files:', error);
+        ToolkitCore.showToast('访达文件拖入失败，请使用附件按钮重试');
+      }
+    };
+
+    document.addEventListener('dragover', handleDragOver, true);
+    document.addEventListener('drop', handleDrop, true);
+    return () => {
+      document.removeEventListener('dragover', handleDragOver, true);
+      document.removeEventListener('drop', handleDrop, true);
+      window.__antigravityFinderDropInitialized = false;
+    };
+  }
+
 
 
   function initClipboardImageCompatibility() {
@@ -24702,6 +24767,10 @@ async function diffFolderChildren(childrenContainer, dirPath, depth, expandedSet
 
     try { cleanupClipboardImage = initClipboardImageCompatibility(); } catch(e) { console.warn('[Boot] ClipboardImage error:', e); }
 
+    let cleanupFinderDrop = null;
+
+    try { cleanupFinderDrop = initFinderFileDropCompatibility(); } catch(e) { console.warn('[Boot] FinderDrop error:', e); }
+
 
 
     let cleanupBinaryFallback = null;
@@ -24809,6 +24878,8 @@ async function diffFolderChildren(childrenContainer, dirPath, depth, expandedSet
 
 
       if (cleanupClipboardImage) cleanupClipboardImage();
+
+      if (cleanupFinderDrop) cleanupFinderDrop();
 
       if (cleanupBinaryFallback) cleanupBinaryFallback();
 

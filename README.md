@@ -1,59 +1,34 @@
-# Antigravity 核心体验修复套件 (Antigravity Core Fixes Kit)
+# Antigravity Core Fixes
 
-专门针对 Google Antigravity 客户端日常使用中的**几何渲染漂移、交互逻辑缺陷、排版错乱与文件预览白屏**等痛点，提供高保真修复与原生级体验加固。
+为 Antigravity 桌面端提供 PDF、Office、本地文件预览和工作区交互修复。macOS 版以用户目录插件和独立启动器运行，官方 `/Applications/Antigravity.app` 与 `app.asar` 保持原样。
 
-> [!NOTE]
-> 本套件为**纯修复与原生体验加固版**，已剔除所有侵入性修改（如大模型上下文压缩限制、第三方翻译等私有服务），**100% 保持官方原生内核与安全审计标准**。
+## macOS 安装与更新
 
----
+需要已安装 `/Applications/Antigravity.app`。在本仓库目录执行：
 
-## macOS 安装说明（保护官方原版）
-
-Mac 版不会修改 `/Applications/Antigravity.app`。双击 **`Mac 安装或更新.command`** 会：
-
-1. 从当前官方 Antigravity 复制一个独立副本到 `Documents/Antigravity-Core-Fixes/Antigravity Core Fixes.app`；
-2. 只修改这个独立副本，并保留它的 `app.asar.original_backup`；
-3. 重新做 macOS ad-hoc 代码签名并校验；
-4. 核心运行时仍同步到 `~/.gemini/antigravity/tools/Antigravity-Core-Fixes`，不受官方升级覆盖。
-
-官方 Antigravity 更新后，重新双击 **`Mac 安装或更新.command`**，脚本会基于新版官方 app 重建独立副本，不会叠加旧补丁。若要使用 100% 官方逻辑，直接打开原来的 `/Applications/Antigravity.app` 即可。
-
-已在 Mac 适配中处理：POSIX 路径/Finder reveal、HOME 目录、Ctrl/Cmd 快捷键、滚轮缩放、Option 拖拽等平台差异。
-
-## 🤖 给 AI Agent 的快速部署指引 (Prompt for AI Agent)
-
-如果你是协助用户部署本套件的 AI 编码助手 / Agent，请按以下标准化流程执行：
-
-### 1. 检查客户端状态与基线
-在终端中执行以下命令（纯 Python 标准库，无外部 pip/npm 依赖）：
 ```bash
-python scripts/install.py --check
-```
-- 检查目标 `app.asar` 是否存在，以及 Antigravity 客户端当前是否正在运行。
-
-### 2. 执行安装（支持自动备份）
-提示用户保存正在进行的对话，退出 Antigravity 桌面应用，然后执行：
-```bash
-python scripts/install.py --install --force-close
-```
-- 该命令会自动备份官方原版至 `app.asar.original_backup`；
-- 将核心运行时同步至用户主目录 `~/.gemini/antigravity/tools/Antigravity-Core-Fixes`（确保即使桌面文件夹后续被清理或移动，修复依然永久稳定生效）；
-- 完成无损打包注入。
-
-### 3. 一键还原官方原版（如需回退）
-如需随时恢复 100% 纯净官方状态：
-```bash
-python scripts/install.py --restore
+python3 scripts/install_mac.py --check
+python3 scripts/install_mac.py
 ```
 
----
+也可以双击 `Mac 安装或更新.command`。安装脚本把 `plugin/`、`core/` 和所需资源复制到 `~/.gemini/config/plugins/antigravity-core-fixes`，并在仓库目录生成 **Antigravity Core Fixes.app** 启动器。以后从这个启动器打开客户端；直接打开官方 Antigravity 不会加载修复插件。
 
-## 👩‍💻 手动安装指引（无 Agent 时）
+官方 App 更新不会覆盖用户目录中的插件。官方版本变化后若出现兼容问题，请先更新本仓库并重新运行安装脚本。插件代码更新后，需要退出并重新打开客户端才能生效。运行中的文件和聊天应先保存，再执行重启。
 
-1. **一键安装**：双击运行本目录下的 **`一键安装修复.bat`**；
-   - 按照屏幕提示，按回车关闭客户端完成自动替换；
-   - 重新打开 Antigravity 即可尽情体验。
-2. **一键还原**：双击运行 **`一键还原官方原版.bat`**，秒级撤销修改。
+## 多文件预览
+
+macOS 版不会把正常的 `file:///Users/...` 路径改成 Windows `c:` 路径。新打开的文件预览会自动固定为独立标签，因此 MD、多个 PDF 和其他文件可以在标签栏中切换。关闭标签仍使用 Antigravity 原生的关闭按钮。
+
+## 检查与排错
+
+- `python3 scripts/install_mac.py --check`：查看官方版本、插件和启动器是否存在。
+- 启动器日志：`~/Library/Logs/Antigravity Core Fixes/launcher.log`。
+- 若修复未生效，确认是从 **Antigravity Core Fixes.app** 启动，并在更新插件后重启客户端。
+- 要使用不加载插件的官方模式，直接打开 `/Applications/Antigravity.app`。macOS 安装流程不修改官方 App，无需还原 `app.asar`。
+
+## Windows 旧版脚本
+
+仓库仍保留 `一键安装修复.bat`、`一键还原官方原版.bat` 和 `scripts/install.py`，它们属于旧版 Windows 改包流程，**不适用于 macOS 用户目录插件**。请勿在 Mac 上使用这些脚本。
 
 ---
 
@@ -70,7 +45,7 @@ python scripts/install.py --restore
 | **划词拖拽前序文字丢失** | 拖选到段落后半部分时，**段落开头的文字被意外取消选中** | `mousedown` 时读取了未更新的全局选区，误捕获到了旧光标作为锚点，触发就近吸附时起点被错误重置 | 改用底层的 `document.caretRangeFromPoint(e.clientX, e.clientY)` 基于物理点击坐标精准锁定起始文字节点与字符偏移量 |
 | **缩放剧烈跳页与横向晃动** | 使用 `Ctrl+滚轮` 缩放时，页面发生剧烈跳动或横向左右偏移晃动 | 缩放时只改了页面槽位尺寸，未对滚动条 `scrollTop` 进行几何位移补偿；缩放锚点随光标晃动 | **对齐福昕/Acrobat 经典视口居中引擎**：横向强制保持全局水平对称居中，纵向以视口正中央阅读行作为几何焦点等比缩放，彻底消除跳页 |
 | **文献超链接与跨页迷路** | 点击论文内引用的 `[1]` 或 `Fig. 3` 无法跳转；或者跳到文末参考文献后，**无法快速返回刚才的正文阅读位置** | 官方未解析 Link Annotations 标注层，缺乏导航历史栈支持 | 深度集成 PDF 标注层，点击平滑滚动定位并伴随浅蓝光晕聚焦；跳转后右下角自动浮现 **`↩ 返回正文 (第 X 页)`** 胶囊栈，支持单击或 `Alt + ←` 一键无缝回跳 |
-| **外部 DOI 链接误触** | 鼠标划词选中文献名时，频繁误触打开网页弹窗 | 点击事件未做修饰键隔离 | 规范化为 **按住 `Ctrl + 单击`** 外部链接/DOI，通过系统底层直接调用 Windows 默认浏览器唤起（Edge/Chrome），普通划词不再误弹 |
+| **外部 DOI 链接误触** | 鼠标划词选中文献名时，频繁误触打开网页弹窗 | 点击事件未做修饰键隔离 | 规范化为 **按住 `Ctrl + 单击`** 外部链接/DOI，通过系统默认浏览器打开，普通划词不再误弹 |
 | **局部框选提问与 Comment 打通** | 无法对论文中的图表、曲线、公式局部截取并向 Agent 提问 | 原生无此能力 | 引入 `Alt + 拖拽` 或顶栏 `[⛶]` 按钮，离线 Canvas 高清重采样截取局部 PNG，直通 Redux 派发 `imageSelection`，在聊天输入框上方挂载原生的 **`💬 1 Comment`** 附图卡片 |
 | **框选提问浮层设计重构** | 原弹窗为硬编码白框与粗框输入框，在界面中十分割裂 | 样式未接入官方规范 | 逆向提取 Antigravity 前端组件样式，改用 `surface-glass` 玻璃微质感、`rounded-xl` 圆角，全面接入 `var(--card)` 等主题变量，深浅色模式自适应 |
 
@@ -103,9 +78,9 @@ python scripts/install.py --restore
 
 ## 🔒 安全性与分发保障
 
-1. **纯标准库零外部依赖**：
-   - 包含完整的纯 Python ASAR 解析与打包引擎，使用者机器无需安装 Node.js、npm 或配置复杂环境。
-2. **官方原版一键双向还原**：
-   - 安装脚本执行前会自动生成 `app.asar.original_backup`，随时可以通过 `--restore` 或双击批处理 100% 回滚至出厂状态。
-3. **安全隔离持久化**：
-   - 核心代码持久化托管于 `~/.gemini/antigravity/tools/Antigravity-Core-Fixes`，即使桌面临时文件夹被清理，客户端依然保持稳定运行。
+1. **macOS 安装脚本使用 Python 标准库**：
+   - 用户目录插件和启动器安装不依赖 pip/npm；运行时使用 Antigravity 自带的 Electron。
+2. **官方原版零修改**：
+   - macOS 版不复制或改写 `app.asar`，官方客户端的代码签名与自动更新链路保持完整。
+3. **插件独立存放**：
+   - 插件安装在 `~/.gemini/config/plugins/antigravity-core-fixes`，官方客户端升级不会直接覆盖该目录。

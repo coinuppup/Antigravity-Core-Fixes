@@ -92,7 +92,7 @@
     open(core.pathToCanonicalFileUri(filePath));
   }
 
-  function enableFileDrag(button, filePath) {
+  function enablePathDrag(button, filePath) {
     const uri = window.__antigravityToolkitCore?.pathToCanonicalFileUri?.(filePath);
     if (!uri) return;
     // Reuse the existing workspace drag dispatcher and its chat mention payload.
@@ -100,7 +100,7 @@
     button.setAttribute('data-uri', uri);
     button.setAttribute('data-path', filePath);
     button.draggable = true;
-    button.title = `${filePath}\n拖入聊天输入框以引用文件`;
+    button.title = `${filePath}\n拖入聊天输入框以引用文件或目录`;
   }
 
   async function children(container, dir, depth, token) {
@@ -120,7 +120,7 @@
         item.after(child);
         void children(child, entry.path, depth + 1, token);
       });
-      if (!entry.isDirectory) enableFileDrag(item, entry.path);
+      enablePathDrag(item, entry.path);
       if (entry.isDirectory) item.ondblclick = event => { event.preventDefault(); event.stopPropagation(); select(entry.path, entry.name); };
     }
   }
@@ -147,7 +147,7 @@
     tree.replaceChildren();
     syncVisibility();
     if (selected) {
-      row(tree, `📁 ${selected.name}`, selected.path, () => {});
+      enablePathDrag(row(tree, `📁 ${selected.name}`, selected.path, () => {}), selected.path);
       void children(tree, selected.path, 0, token);
     }
   }
@@ -187,7 +187,7 @@
     for (const item of result.items) {
       const resultRow = row(tree, `${item.isDirectory ? '📁' : '📄'} ${all && item.projectName ? item.projectName + ' / ' : ''}${item.name}`, item.path, () =>
         item.isDirectory ? select(item.path, item.name) : openFile(item.path));
-      if (!item.isDirectory) enableFileDrag(resultRow, item.path);
+      enablePathDrag(resultRow, item.path);
     }
     if (result.truncated) row(tree, '结果已截断，请输入更具体的名称', '', () => {});
   }

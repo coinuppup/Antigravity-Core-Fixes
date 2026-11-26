@@ -4,9 +4,10 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {execFile} = require('node:child_process');
+const {listNavigationRoots, searchNavigationFiles} = require('./navigation.cjs');
 
 const ASSETS = new Set(['xlsx.full.min.js', 'jszip.min.js', 'docx-preview.min.js', 'PptxViewJS.min.js']);
-const MODULES = new Set(['desktop_compat.js', 'office_router.js', 'chat_enhancer.js']);
+const MODULES = new Set(['desktop_compat.js', 'office_router.js', 'chat_enhancer.js', 'cross_project_tree.js']);
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 
 function cleanLocalPath(raw) {
@@ -99,6 +100,21 @@ function register({electron, pluginRoot}) {
     const entries = await fs.promises.readdir(dir, {withFileTypes: true});
     return entries.map(entry => ({name: entry.name, path: path.join(dir, entry.name), isDirectory: entry.isDirectory()}))
       .sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name, undefined, {sensitivity: 'base'}));
+  });
+  handle('agcf:list-navigation-roots', async () => listNavigationRoots());
+  handle('agcf:search-navigation-files', async (_event, query, scope, selectedPath, projectId) => {
+    const navigation = listNavigationRoots();
+    let roots = [];
+    if (scope === 'all-projects') {
+      roots = navigation.projects.flatMap(project => project.folders.map(folder => ({path: folder.path, projectName: project.name})));
+    } else if (scope === 'project' && typeof projectId === 'string') {
+      const project = navigation.projects.find(item => item.id === projectId);
+      roots = project ? project.folders.map(folder => ({path: folder.path, projectName: project.name})) : [];
+    } else if (scope === 'directory' && typeof selectedPath === 'string') {
+      const dir = cleanLocalPath(selectedPath);
+      if (dir && path.isAbsolute(dir)) roots = [{path: dir, projectName: path.basename(dir)}];
+    }
+    return searchNavigationFiles(query, roots);
   });
   handle('agcf:reveal-in-explorer', async (_event, raw) => {
     const resolved = smartResolve(raw);

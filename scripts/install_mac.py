@@ -16,7 +16,7 @@ PLUGIN_DEST = Path.home() / '.gemini/config/plugins/antigravity-core-fixes'
 LAUNCHER_APP = ROOT / 'Antigravity Core Fixes.app'
 BUILD_APP = ROOT / '.Antigravity Core Fixes.build.app'
 OLD_APP = ROOT / '.Antigravity Core Fixes.old.app'
-CORE_FILES = ('desktop_compat.js', 'office_router.js', 'chat_enhancer.js', 'startup_recovery.cjs')
+CORE_FILES = ('desktop_compat.js', 'office_router.js', 'chat_enhancer.js', 'startup_recovery.cjs', 'cross_project_tree.js')
 ASSET_FILES = ('xlsx.full.min.js', 'jszip.min.js', 'docx-preview.min.js', 'PptxViewJS.min.js')
 
 

@@ -19,6 +19,8 @@ if (window.top === window && location.protocol === 'https:' && location.hostname
     focusWindow: () => ipcRenderer.invoke('agcf:focus-window'),
     copyFilesToClipboard: paths => ipcRenderer.invoke('agcf:copy-files-to-clipboard', paths),
     readDirEntries: path => ipcRenderer.invoke('agcf:read-dir-entries', path),
+    listNavigationRoots: () => ipcRenderer.invoke('agcf:list-navigation-roots'),
+    searchNavigationFiles: (query, scope, selectedPath, projectId) => ipcRenderer.invoke('agcf:search-navigation-files', query, scope, selectedPath, projectId),
     watchWorkspace: path => ipcRenderer.invoke('agcf:watch-workspace', path),
     unwatchWorkspace: () => ipcRenderer.invoke('agcf:unwatch-workspace'),
     revealInExplorer: path => ipcRenderer.invoke('agcf:reveal-in-explorer', path),
@@ -31,7 +33,7 @@ if (window.top === window && location.protocol === 'https:' && location.hostname
   });
 
   async function load() {
-    for (const name of ['desktop_compat.js', 'office_router.js', 'chat_enhancer.js']) {
+    for (const name of ['desktop_compat.js', 'office_router.js', 'chat_enhancer.js', 'cross_project_tree.js']) {
       try {
         const source = await ipcRenderer.invoke('agcf:get-core-module', name);
         if (!source) throw new Error(`missing module: ${name}`);

@@ -15292,7 +15292,22 @@ async function diffFolderChildren(childrenContainer, dirPath, depth, expandedSet
 
 
 
+    // The native tab bar uses italic titles for disposable preview tabs.
+    // Pin file tabs through its own double-click action so opening another
+    // document never replaces an earlier Markdown, PDF, or Office tab.
+    function pinFilePreviewTabs() {
+      for (const tab of document.querySelectorAll('[data-tab-id]')) {
+        const id = tab.getAttribute('data-tab-id') || '';
+        if (!/^(file__|artifact__)/.test(id) ||
+            !tab.querySelector('.agy-aux-tab-title.italic')) continue;
+        tab.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+      }
+    }
+
     function healBrokenTabs() {
+      // POSIX file:///Users/... is valid on macOS. The Windows drive repair
+      // would close this tab and reopen a nonexistent /c:/Users/... path.
+      if (/Mac/i.test(navigator.platform + ' ' + navigator.userAgent)) return;
 
 
 
@@ -15721,6 +15736,7 @@ async function diffFolderChildren(childrenContainer, dirPath, depth, expandedSet
 
 
     function updateSidebar() {
+      pinFilePreviewTabs();
 
       if (!canEnhanceWorkspace()) {
 

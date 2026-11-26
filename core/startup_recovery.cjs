@@ -1,5 +1,6 @@
 /* Recover transient failures of the local startup page without touching chats. */
-function attach(win, {setTimer=setTimeout, clearTimer=clearTimeout, log=console.warn}={}) {
+function attach(win, {setTimer=setTimeout, clearTimer=clearTimeout, log=console.warn,
+  openExternal=url=>require('electron').shell.openExternal(url)}={}) {
   const contents=win.webContents;
   let target=null, timer=null, attempts=0, finished=false, closed=false, failedNavigation=false;
   const valid=url=>{
@@ -36,14 +37,29 @@ function attach(win, {setTimer=setTimeout, clearTimer=clearTimeout, log=console.
       contents.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(html)).catch(()=>{});
     }
   }
+  // Markdown links can otherwise replace the local app page in this window.
+  // Only handle renderer navigation from our local app to a public HTTP(S) URL;
+  // leave local routes and other protocols to the official application.
+  function externalNavigation(event,url) {
+    if(closed || !valid(contents.getURL()))return;
+    let destination;
+    try {destination=new URL(url);} catch (_) {return;}
+    if(!['http:','https:'].includes(destination.protocol) ||
+       ['127.0.0.1','localhost','[::1]'].includes(destination.hostname))return;
+    event.preventDefault();
+    Promise.resolve().then(()=>openExternal(destination.href)).catch(error=>
+      log('[NavigationGuard] Failed to open external link:',error));
+  }
   contents.on('did-start-navigation',start);
   contents.on('did-finish-load',success);
   contents.on('did-fail-load',failed);
+  contents.on('will-navigate',externalNavigation);
   win.once('closed',()=>{
     dispose();
     contents.removeListener('did-start-navigation',start);
     contents.removeListener('did-finish-load',success);
     contents.removeListener('did-fail-load',failed);
+    contents.removeListener('will-navigate',externalNavigation);
   });
   return {dispose};
 }

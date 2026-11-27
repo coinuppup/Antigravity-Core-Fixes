@@ -22651,6 +22651,32 @@ async function diffFolderChildren(childrenContainer, dirPath, depth, expandedSet
 
 
   function initTabHeaderContextMenu() {
+    const isFileTab = id => /^(file__|artifact__)/.test(id || '');
+    const closeButtonFor = tab => tab?.parentElement?.querySelector('button[aria-label^="Close " i]') ||
+      tab?.querySelector('span[role="button"][aria-label*="Close" i], button[aria-label*="Close" i]');
+    const fileTabIds = () => Array.from(document.querySelectorAll('.agy-aux-tab > button[data-tab-id]'))
+      .map(tab => tab.getAttribute('data-tab-id')).filter(isFileTab);
+    async function closeFileTabs(ids) {
+      let closed = 0;
+      for (const id of ids) {
+        const tab = Array.from(document.querySelectorAll('.agy-aux-tab > button[data-tab-id]'))
+          .find(item => item.getAttribute('data-tab-id') === id);
+        if (!tab) continue;
+        const close = closeButtonFor(tab);
+        if (!close) break;
+        close.click();
+        // Wait for React or a native unsaved-file guard before closing another tab.
+        const deadline = Date.now() + 800;
+        while (Date.now() < deadline && Array.from(document.querySelectorAll('.agy-aux-tab > button[data-tab-id]'))
+          .some(item => item.getAttribute('data-tab-id') === id)) {
+          await new Promise(resolve => setTimeout(resolve, 30));
+        }
+        if (Array.from(document.querySelectorAll('.agy-aux-tab > button[data-tab-id]'))
+          .some(item => item.getAttribute('data-tab-id') === id)) break;
+        closed++;
+      }
+      if (closed < ids.length) ToolkitCore.showToast(`已关闭 ${closed} 个文件标签，剩余标签未继续关闭`);
+    }
 
 
 
@@ -23010,15 +23036,7 @@ async function diffFolderChildren(childrenContainer, dirPath, depth, expandedSet
 
 
 
-      const closeBtn = tabEl.querySelector('span[role="button"][aria-label*="Close" i], [aria-label*="Close" i], button[aria-label*="Close" i]') ||
-
-
-
-
-
-
-
-                       tabEl.querySelector('svg')?.closest('[role="button"], button');
+      const closeBtn = closeButtonFor(tabEl);
 
 
 
@@ -23226,7 +23244,7 @@ async function diffFolderChildren(childrenContainer, dirPath, depth, expandedSet
 
 
 
-        menuItems.push({ id: 'close-tab', label: 'Close Tab' });
+        menuItems.push({ id: 'close-tab', label: '关闭当前标签' });
 
 
 
@@ -23242,6 +23260,13 @@ async function diffFolderChildren(childrenContainer, dirPath, depth, expandedSet
 
 
 
+      const tabs = isFileTab(tabInfo.tabId) ? fileTabIds() : [];
+      const index = tabs.indexOf(tabInfo.tabId);
+      if (index >= 0) {
+        if (tabs.length > 1) menuItems.push({ id: 'close-other-tabs', label: `关闭其他文件标签 (${tabs.length - 1})` });
+        if (index < tabs.length - 1) menuItems.push({ id: 'close-right-tabs', label: `关闭右侧文件标签 (${tabs.length - index - 1})` });
+        menuItems.push({ id: 'close-all-file-tabs', label: `关闭所有文件标签 (${tabs.length})` });
+      }
       if (window.electronNative && typeof window.electronNative.showContextMenu === 'function') {
 
 
@@ -23403,45 +23428,16 @@ async function diffFolderChildren(childrenContainer, dirPath, depth, expandedSet
 
 
           } else if (selectedId === 'close-tab') {
-
-
-
-
-
-
-
-            if (tabInfo.closeBtn) {
-
-
-
-
-
-
-
-              tabInfo.closeBtn.click();
-
-
-
-
-
-
-
-            }
-
-
-
-
-
-
-
+            tabInfo.closeBtn?.click();
+          } else if (selectedId === 'close-other-tabs') {
+            await closeFileTabs(fileTabIds().filter(id => id !== tabInfo.tabId));
+          } else if (selectedId === 'close-right-tabs') {
+            const currentTabs = fileTabIds();
+            const currentIndex = currentTabs.indexOf(tabInfo.tabId);
+            if (currentIndex >= 0) await closeFileTabs(currentTabs.slice(currentIndex + 1));
+          } else if (selectedId === 'close-all-file-tabs') {
+            await closeFileTabs(fileTabIds());
           }
-
-
-
-
-
-
-
         }).catch(() => {});
 
 
